@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package push.service.v1;
+
+option go_package = "v1";
+
+
+service Push {
+  rpc AddReport (AddReportRequest) returns (AddReportReply) {
+  }
+  rpc DelReport (DelReportRequest) returns (DelReportReply) {
+  }
+
+}
+
+// del 请求结构体
+message DelReportRequest {
+  int32 app_id = 1; // appid信息
+  int64 mid = 2; // 用户mid
+  string device_token = 3;
+}
+
+message DelReportReply {
+}
+
+message AddReportRequest {
+  ModelReport report = 1;
+}
+
+message AddReportReply {
+}
+message ModelReport {
+  int64 id = 1 ;
+  int32 app_id = 2 ;
+  int32 platform_id = 3 ;
+  int64 mid = 4;
+  string buvid = 5;
+  string device_token = 6;
+  int32 build = 7;
+  DeviceInfo device_info = 8;
+}
+
+message DeviceInfo {
+  string name = 1;
+  DeviceType type = 2;
+}
+enum DeviceType {
+  un = 0;
+  Web = 1;
+  App = 2;
+}
