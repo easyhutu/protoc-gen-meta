@@ -27,7 +27,7 @@ type LocationMessage struct {
 type LocationService struct {
 	Method      *descriptor.MethodDescriptorProto `json:"method"`
 	PackageName string                            `json:"package_name"`
-	Path        string                            `json:"path"` // /package/service/method 
+	Path        string                            `json:"path"` // /package.service/method
 	ReqName     string                            `json:"req_name"`
 	RespName    string                            `json:"resp_name"`
 	Req         *LocationMessage                  `json:"req"`
@@ -146,7 +146,7 @@ func (g *Generate) getLocationServices() {
 				ser := &LocationService{
 					Method:      method,
 					Filename:    filename,
-					Path:        fmt.Sprintf("/%s/%s/%s", descriptorProto.GetPackage(), service.GetName(), method.GetName()),
+					Path:        fmt.Sprintf("/%s.%s/%s", descriptorProto.GetPackage(), service.GetName(), method.GetName()),
 					PackageName: descriptorProto.GetPackage(),
 				}
 				ser.ReqName = withTpName(method.GetInputType())
