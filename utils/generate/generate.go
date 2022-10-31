@@ -36,10 +36,19 @@ type LocationService struct {
 	Filename    string                            `json:"filename"`
 }
 
-func (g *Generate) FilterMessages(suffix string, messages []*LocationMessage) *LocationMessage {
-	for _, message := range messages {
+func (g *Generate) filterMessages(suffix, filename string) *LocationMessage {
+	for _, message := range g.Msg[filename] {
 		if strings.HasSuffix(suffix, message.Message.GetName()) {
 			return message
+		}
+	}
+	return nil
+}
+
+func (g *Generate) filterNestedMsg(suffix string, nestedInfo map[string]interface{}) interface{} {
+	for key, ret := range nestedInfo {
+		if strings.HasSuffix(suffix, key) {
+			return ret
 		}
 	}
 	return nil
@@ -92,23 +101,37 @@ func (g *Generate) GenMeta() *Generate {
 	for filename, services := range g.Services {
 		for _, ser := range services {
 			mockInfo := make(map[string]interface{})
+			nestedInfo := make(map[string]interface{})
+			g.loopNested(ser.Req.Message, nestedInfo, filename)
 			for _, field := range ser.Req.Message.Field {
 				mockInfo[field.GetName()] = field.GetType()
 			}
-			g.loopNested(ser.Req.Message, mockInfo, filename)
+			g.loopField(ser.Req.Message, mockInfo, nestedInfo, filename)
+
 			ser.RequestMock = mockInfo
 		}
 	}
 	return g
 
 }
-
-func (g *Generate) loopNested(message *descriptor.DescriptorProto, mockInfo map[string]interface{}, filename string) {
+func (g *Generate) loopNested(message *descriptor.DescriptorProto, nestedInfo map[string]interface{}, filename string) {
+	for _, nfield := range message.GetNestedType() {
+		ret := make(map[string]interface{})
+		g.loopField(nfield, ret, nil, filename)
+		nestedInfo[nfield.GetName()] = ret
+	}
+}
+func (g *Generate) loopField(message *descriptor.DescriptorProto, mockInfo, nestedInfo map[string]interface{}, filename string) {
 	for _, field := range message.GetField() {
 		// 如果是嵌套类型，递归构建mock对象，否则直接构建mock对象kv
 		if field.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE {
 			ret := make(map[string]interface{})
-			g.loopNested(g.FilterMessages(field.GetTypeName(), g.Msg[filename]).Message, ret, filename)
+			msg := g.filterMessages(field.GetTypeName(), filename)
+			if msg == nil {
+				mockInfo[field.GetName()] = g.filterNestedMsg(field.GetTypeName(), nestedInfo)
+				continue
+			}
+			g.loopField(msg.Message, ret, nestedInfo, filename)
 			mockInfo[field.GetName()] = ret
 		} else {
 			mockInfo[field.GetName()] = withDefaultValue(field.GetType())
@@ -117,9 +140,8 @@ func (g *Generate) loopNested(message *descriptor.DescriptorProto, mockInfo map[
 }
 
 func (g *Generate) getLocationServices() {
-	for index, filename := range g.Req.FileToGenerate {
-		descriptorProto := g.Req.ProtoFile[index]
-
+	for _, descriptorProto := range g.Req.ProtoFile {
+		filename := descriptorProto.GetName()
 		locationMessages := make([]*LocationMessage, 0)
 		desc := descriptorProto.GetSourceCodeInfo()
 		locations := desc.GetLocation()
@@ -141,6 +163,9 @@ func (g *Generate) getLocationServices() {
 			}
 		}
 		g.Msg[filename] = append(g.Msg[filename], locationMessages...)
+		if len(descriptorProto.Service) <= 0 {
+			continue
+		}
 		for _, service := range descriptorProto.Service {
 			for _, method := range service.Method {
 				ser := &LocationService{
@@ -151,8 +176,8 @@ func (g *Generate) getLocationServices() {
 				}
 				ser.ReqName = withTpName(method.GetInputType())
 				ser.RespName = withTpName(method.GetOutputType())
-				ser.Req = g.FilterMessages(method.GetInputType(), locationMessages)
-				ser.Resp = g.FilterMessages(method.GetOutputType(), locationMessages)
+				ser.Req = g.filterMessages(method.GetInputType(), filename)
+				ser.Resp = g.filterMessages(method.GetOutputType(), filename)
 				g.Services[filename] = append(g.Services[filename], ser)
 			}
 		}
