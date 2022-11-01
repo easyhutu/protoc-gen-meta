@@ -25,6 +25,7 @@ type LocationMessage struct {
 }
 
 type LocationService struct {
+	ServiceName string                            `json:"service_name"`
 	Method      *descriptor.MethodDescriptorProto `json:"method"`
 	PackageName string                            `json:"package_name"`
 	Path        string                            `json:"path"` // /package.service/method
@@ -117,6 +118,11 @@ func (g *Generate) GenMeta() *Generate {
 func (g *Generate) loopNested(message *descriptor.DescriptorProto, nestedInfo map[string]interface{}, filename string) {
 	for _, nfield := range message.GetNestedType() {
 		ret := make(map[string]interface{})
+		if nfield.GetOptions().GetMapEntry() {
+			ret[nfield.GetField()[0].GetName()] = nfield.GetField()[1].GetName()
+			nestedInfo[nfield.GetName()] = ret
+			continue
+		}
 		g.loopField(nfield, ret, nil, filename)
 		nestedInfo[nfield.GetName()] = ret
 	}
@@ -128,13 +134,13 @@ func (g *Generate) loopField(message *descriptor.DescriptorProto, mockInfo, nest
 			ret := make(map[string]interface{})
 			msg := g.filterMessages(field.GetTypeName(), filename)
 			if msg == nil {
-				mockInfo[field.GetName()] = g.filterNestedMsg(field.GetTypeName(), nestedInfo)
+				mockInfo[field.GetName()] = withDefaultValue(field, nil, nestedInfo)
 				continue
 			}
 			g.loopField(msg.Message, ret, nestedInfo, filename)
-			mockInfo[field.GetName()] = ret
+			mockInfo[field.GetName()] = withDefaultValue(field, ret, nil)
 		} else {
-			mockInfo[field.GetName()] = withDefaultValue(field.GetType())
+			mockInfo[field.GetName()] = withDefaultValue(field, nil, nil)
 		}
 	}
 }
@@ -169,6 +175,7 @@ func (g *Generate) getLocationServices() {
 		for _, service := range descriptorProto.Service {
 			for _, method := range service.Method {
 				ser := &LocationService{
+					ServiceName: service.GetName(),
 					Method:      method,
 					Filename:    filename,
 					Path:        fmt.Sprintf("/%s.%s/%s", descriptorProto.GetPackage(), service.GetName(), method.GetName()),
